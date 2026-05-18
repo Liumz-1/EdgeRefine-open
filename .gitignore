@@ -2,7 +2,6 @@ result/
 __pycache__/
 .idea/
 dataset/
-EdgeRefine-datasets.zip
 *.pyc
 *.pyo
 *.pyd

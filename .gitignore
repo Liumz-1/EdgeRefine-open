@@ -1,0 +1,17 @@
+result/
+__pycache__/
+.idea/
+dataset/
+EdgeRefine-datasets.zip
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+Thumbs.db

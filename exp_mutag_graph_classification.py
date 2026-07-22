@@ -49,12 +49,7 @@ def resolve_tudataset_root() -> Path:
     current_root = Path(__file__).resolve().parent / "dataset" / "TUDataset"
     if current_root.exists():
         return current_root
-
-    legacy_root = Path(r"E:\Edgerefine\EdgeRefine (3)\dataset\TUDataset")
-    if legacy_root.exists():
-        return legacy_root
-
-    raise FileNotFoundError("TUDataset root not found in openscience(2) or EdgeRefine (3).")
+    raise FileNotFoundError(f"TUDataset root not found: {current_root}")
 
 
 def perturb_data_list(data_list, epsilon):

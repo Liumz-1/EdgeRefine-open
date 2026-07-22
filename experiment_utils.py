@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+import time
 
 import numpy as np
 import torch
@@ -171,7 +172,8 @@ def train_and_test_node_classifier(
     device: torch.device | None = None,
     max_epochs: int = 700,
     patience: int = 100,
-) -> float:
+    return_details: bool = False,
+) -> float | dict[str, float | int]:
     device = device or get_device()
     set_seed(seed)
     feat, label, _ = load_graph_data(dataset_name, show_details=False)
@@ -199,8 +201,11 @@ def train_and_test_node_classifier(
 
     best_val_acc = 0.0
     patience_counter = 0
+    epochs_ran = 0
+    training_start = time.perf_counter()
 
-    for _ in range(1, max_epochs + 1):
+    for epoch in range(1, max_epochs + 1):
+        epochs_ran = epoch
         model.train()
         optimizer.zero_grad()
         try:
@@ -233,6 +238,8 @@ def train_and_test_node_classifier(
         if patience_counter >= patience:
             break
 
+    training_time_seconds = time.perf_counter() - training_start
+
     model.eval()
     with torch.no_grad():
         try:
@@ -243,6 +250,13 @@ def train_and_test_node_classifier(
         except Exception:
             pred = model(data).argmax(dim=1)
         test_acc = (pred[data.test_mask] == data.y[data.test_mask]).sum().item() / data.test_mask.sum().item()
+    if return_details:
+        return {
+            "test_accuracy": test_acc,
+            "training_time_seconds": training_time_seconds,
+            "mean_epoch_time_ms": training_time_seconds * 1000.0 / max(epochs_ran, 1),
+            "epochs": epochs_ran,
+        }
     return test_acc
 
 

@@ -50,29 +50,36 @@ def symmetric_randomized_response_perturbation(adj_matrix, epsilon):
 
     return perturbed_adj.astype(np.int64)
 
-def compute_jaccard_matrix(adj):
+def compute_jaccard_matrix(adj, block_size=512):
+    """Compute the legacy all-pairs Jaccard matrix in bounded-memory blocks.
+
+    For a binary adjacency matrix, ``A @ A.T`` gives the number of common
+    neighbors.  Processing rows in blocks avoids the Python-level pair loop
+    and does not require a second full-size intersection matrix.
+    """
+    adj = np.asarray(adj)
+    if adj.ndim != 2 or adj.shape[0] != adj.shape[1]:
+        raise ValueError("error: adj must be a square matrix")
+    if block_size <= 0:
+        raise ValueError("error: block_size must be positive")
 
     n = adj.shape[0]
-    jaccard = np.zeros((n, n))
+    binary_adj = (adj == 1).astype(np.float32, copy=False)
+    degrees = np.sum(binary_adj, axis=1, dtype=np.float64)
+    jaccard = np.zeros((n, n), dtype=np.float64)
 
+    for start in range(0, n, block_size):
+        stop = min(start + block_size, n)
+        intersections = binary_adj[start:stop] @ binary_adj.T
+        unions = degrees[start:stop, None] + degrees[None, :] - intersections
+        block = np.zeros(intersections.shape, dtype=np.float64)
+        np.divide(intersections, unions, out=block, where=unions != 0)
+        # Preserve the scaling produced by the previous upper-triangle
+        # symmetrization so existing experiment outputs remain comparable.
+        block *= 0.5
+        jaccard[start:stop] = block
 
-    for i in range(n):
-        for j in range(i + 1, n):
-
-            neighbors_i = np.where(adj[i] == 1)[0]
-            neighbors_j = np.where(adj[j] == 1)[0]
-
-
-            common = np.intersect1d(neighbors_i, neighbors_j)
-            union = np.union1d(neighbors_i, neighbors_j)
-
-            if len(union) == 0:
-                jaccard[i, j] = 0.0
-            else:
-                jaccard[i, j] = len(common) / len(union)
-
-
-    jaccard = (jaccard + jaccard.T) / 2
+    np.fill_diagonal(jaccard, 0.0)
     return jaccard
 
 
@@ -107,7 +114,7 @@ def adamic_adar_prob_matrix(adj_matrix, n_bins=10):
     for bin_idx in range(n_bins):
         mask = bins == bin_idx
         bin_probs.append(np.mean(labels[mask]) if np.any(mask) else 0.5)
-    prob_flat = np.array([bin_probs[bin_idx] for bin_idx in bins])
+    prob_flat = np.asarray(bin_probs)[bins]
     return _rebuild_matrix(n, prob_flat)
 
 
@@ -207,7 +214,7 @@ def jaccard_probability(adj, method="sigmoid", max_j=None, random_state=None, **
                 else:
                     prob_bin = 0.5
                 bin_probs.append(prob_bin)
-            prob_flat = np.array([bin_probs[bin] for bin in bins])
+            prob_flat = np.asarray(bin_probs)[bins]
             prob = _rebuild_matrix(n, prob_flat)
 
     else:
@@ -219,12 +226,9 @@ def jaccard_probability(adj, method="sigmoid", max_j=None, random_state=None, **
 
 def _rebuild_matrix(n, prob_flat):
     prob = np.zeros((n, n))
-    idx = 0
-    for i in range(n):
-        for j in range(i + 1, n):
-            prob[i, j] = prob_flat[idx]
-            prob[j, i] = prob_flat[idx]
-            idx += 1
+    upper = np.triu_indices(n, k=1)
+    prob[upper] = prob_flat
+    prob[(upper[1], upper[0])] = prob_flat
     return prob
 
 def _blink_posterior(noisy_adj, noisy_deg, eps_a):

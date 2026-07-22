@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from experiment_utils import ensure_output_dir, load_graph_data, set_seed
+from experiment_utils import DEFAULT_EPSILONS, ensure_output_dir, load_graph_data, set_seed
 from grand_attack_core import (
     DeterministicAttack,
     Graph,
@@ -16,7 +17,7 @@ from grand_attack_core import (
 from structure import graph_sampling_with_ratio, jaccard_probability, symmetric_randomized_response_perturbation
 
 DATASETS = ["cora", "amap"]
-EPSILON_VALUES = [0.5]
+EPSILON_VALUES = DEFAULT_EPSILONS
 SEED = 42
 
 
@@ -124,7 +125,16 @@ def run_grand_attack(original_adj: np.ndarray, perturbed_adj: np.ndarray) -> dic
     return metrics
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the GRAND reconstruction attack evaluation.")
+    parser.add_argument("--datasets", nargs="+", choices=DATASETS, default=DATASETS)
+    parser.add_argument("--epsilons", nargs="+", type=float, default=EPSILON_VALUES)
+    parser.add_argument("--seed", type=int, default=SEED)
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     output_dir = ensure_output_dir("exp_grand_attack")
     log_path = output_dir / "grand_attack_log.txt"
     json_path = output_dir / "grand_attack_results.json"
@@ -132,14 +142,14 @@ def main() -> None:
     all_results = []
 
     with log_path.open("w", encoding="utf-8") as log_file:
-        for dataset_name in DATASETS:
+        for dataset_name in args.datasets:
             _, _, original_adj = load_graph_data(dataset_name, show_details=False)
-            for epsilon in EPSILON_VALUES:
-                set_seed(SEED)
+            for epsilon in args.epsilons:
+                set_seed(args.seed)
                 log_file.write(f"dataset={dataset_name}, epsilon={epsilon}\n")
                 perturbed_adj = perturb_graph_edgerefine(original_adj, epsilon)
                 metrics = run_grand_attack(original_adj, perturbed_adj)
-                result = to_builtin({"dataset": dataset_name, "epsilon": epsilon, **metrics})
+                result = to_builtin({"dataset": dataset_name, "epsilon": epsilon, "seed": args.seed, **metrics})
                 all_results.append(result)
                 log_file.write(json.dumps(result, ensure_ascii=False) + "\n")
                 print(

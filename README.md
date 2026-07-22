@@ -16,7 +16,6 @@ The release includes:
 This release does **not** include:
 
 - experiment result files
-- internal statistical testing scripts
 - internal scripts for exporting or reloading preprocessed matrices
 
 ## Repository Structure
@@ -64,6 +63,12 @@ Before running the experiments, create a `dataset/` directory and extract the ar
 ```bash
 mkdir dataset
 unzip EdgeRefine-datasets.zip -d dataset
+```
+
+The current archive uses POSIX-style `/` separators and can also be extracted portably with Python:
+
+```bash
+python -m zipfile -e EdgeRefine-datasets.zip dataset
 ```
 
 Example target layout after extraction:
@@ -138,7 +143,13 @@ Each public script corresponds to a paper experiment category or a public evalua
 - `exp_error_metrics.py`
   Probability calibration and graph-estimation error analysis, including `Brier`, `ECE`, and `pMAD`.
 - `exp_runtime_publish_time.py`
-  Runtime and timing-oriented evaluation.
+  Preprocessing time, normalized density, and optional GNN training-time evaluation for Tables 5-6.
+- `exp_sampling_rate_sweep.py`
+  Sampling-rate sweep used by Table 7.
+- `exp_rr_only_ablation.py`
+  Randomized-response-only ablation used by Figure 5.
+- `exp_summary_metrics.py`
+  Post-processing for the stability and privacy-utility metrics in Tables 3-4.
 
 ### Attack and Link Prediction
 
@@ -158,11 +169,13 @@ Each public script corresponds to a paper experiment category or a public evalua
 
 Below are minimal public commands for the released experiments.
 
-### Main EdgeRefine
+### Main EdgeRefine (recommended)
 
 ```bash
-python exp_single_edgerefine.py
+python exp_main_edgerefine.py
 ```
+
+`exp_single_edgerefine.py` remains available as a more verbose single-seed grid entrypoint. Both scripts now preprocess each `(dataset, epsilon, seed)` graph once and reuse it across GAT, GCN, and GIN.
 
 ### Main Released Baselines
 
@@ -176,10 +189,10 @@ python exp_single_baselines.py
 python exp_no_noise_baseline.py
 ```
 
-### Main Released Entry
+### Verbose Single-Seed Entry
 
 ```bash
-python exp_main_edgerefine.py
+python exp_single_edgerefine.py
 ```
 
 ### Method Variants
@@ -194,17 +207,50 @@ python exp_method_variant_comparison.py
 python exp_error_metrics.py
 ```
 
+This script directly outputs MAE, Brier score, ECE, pMAD, and the ECE/pMAD ratio. Use `--seed`, `--datasets`, and `--epsilons` to restrict a run.
+
 ### Runtime Evaluation
 
 ```bash
 python exp_runtime_publish_time.py
 ```
 
+Use `--skip-training` when only preprocessing time and graph density are needed. The default training-time run uses GAT; select another backbone with `--model`.
+
 ### GRAND Attack
 
 ```bash
 python exp_grand_attack.py
 ```
+
+The default command sweeps all seven privacy budgets. A smaller run can be selected explicitly, for example `python exp_grand_attack.py --epsilons 0.5 1.0`.
+
+### Table 7 Sampling-Rate Sweep
+
+```bash
+python exp_sampling_rate_sweep.py
+```
+
+### Figure 5 RR-Only Ablation
+
+```bash
+python exp_rr_only_ablation.py
+```
+
+Pass multiple values to `--seeds` when repeated runs are required.
+
+### Table 3/4 Summary Metrics
+
+After generating EdgeRefine, baseline, and Origin CSV files, run:
+
+```bash
+python exp_summary_metrics.py \
+  --edgerefine-csv result/exp_main_edgerefine/main_edgerefine_results.csv \
+  --baseline-csvs result/exp_single_baselines/baseline_single_results.csv \
+  --origin-csv result/exp_no_noise_baseline/no_noise_baseline_results.csv
+```
+
+This produces variance, CV, AUR, MCF, and PUBI for each method, dataset, and architecture.
 
 ### Link Prediction
 
@@ -232,6 +278,25 @@ This applies to the released single-run public entrypoints:
 
 The `MUTAG` graph classification script is an intentional exception and preserves its original repeated-run protocol.
 
+The single-seed workflow is intended as a deterministic, runnable artifact check. Paper values that report means, standard deviations, or significance tests require the corresponding repeated-seed configuration.
+
+## Paper Result Map
+
+| Paper result | Public entrypoint |
+|---|---|
+| Figure 3 main accuracy grid | `exp_main_edgerefine.py`, `exp_single_baselines.py`, `exp_no_noise_baseline.py` |
+| Tables 3-4 stability and PUBI | `exp_summary_metrics.py` |
+| Tables 5-6 density and timing | `exp_runtime_publish_time.py` |
+| Table 7 sampling-rate analysis | `exp_sampling_rate_sweep.py` |
+| Figure 4 probability errors | `exp_error_metrics.py` |
+| Figure 5 RR-only ablation | `exp_rr_only_ablation.py` |
+| Table 8 MUTAG | `exp_mutag_graph_classification.py` |
+| Table 9 GRAND attack | `exp_grand_attack.py` |
+
+## Runtime Notes
+
+Jaccard estimation is the dominant preprocessing cost on the larger graphs. The implementation uses blockwise matrix multiplication to avoid the original Python all-pairs intersection loop, but full multi-dataset and multi-seed sweeps can still take substantial time. Use each script's `--help` options to run a small subset first. Preprocessed graphs are reused across the three GNN backbones whenever the graph construction does not depend on the model.
+
 ## Output Files
 
 Every public script creates its own subdirectory under `result/` and writes CSV outputs there.
@@ -248,7 +313,7 @@ Result files are generated locally when you run experiments, but they are **not*
 
 This repository is the artifact for the EdgeRefine paper. The final paper citation will be added after the proceedings version becomes available.
 
-For now, please cite the archived artifact DOI generated by Zenodo for the CCS 2026 artifact release.
+Until the proceedings citation becomes available, please cite the repository URL.
 ```bibtex
 @software{edgerefine_artifact_2026,
   title  = {EdgeRefine Artifact},

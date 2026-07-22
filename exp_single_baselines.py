@@ -49,14 +49,14 @@ def main() -> None:
         for dataset_name in DATASETS:
             _, _, original_adj = load_graph_data(dataset_name, show_details=False)
             for epsilon in EPSILON_VALUES:
+                set_seed(SEED)
+                processed_adj = preprocess_fn(original_adj, epsilon)
                 for model_type in MODELS:
                     current += 1
                     print(
                         f"[{current}/{total}] preparing baseline={baseline_name}, dataset={dataset_name}, epsilon={epsilon}, model={model_type}",
                         flush=True,
                     )
-                    set_seed(SEED)
-                    processed_adj = preprocess_fn(original_adj, epsilon)
                     print(f"  training seed={SEED}", flush=True)
                     accuracy = train_and_test_node_classifier(
                         dataset_name=dataset_name,

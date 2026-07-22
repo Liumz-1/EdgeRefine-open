@@ -259,6 +259,8 @@ python exp_link_prediction.py
 python exp_link_prediction_base.py
 ```
 
+Both scripts use a fixed, disjoint split of unique undirected edges. Positive test edges are removed from the graph before representation learning and are excluded from training negative sampling.
+
 ### MUTAG Graph Classification
 
 ```bash

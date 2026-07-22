@@ -3,6 +3,7 @@ from torch_geometric.nn import GCNConv
 import torch.nn.functional as F
 from torch_geometric.nn import SAGEConv
 from torch_geometric.nn import GINConv, global_mean_pool
+from torch_geometric.utils import softmax as pyg_softmax
 import torch
 import torch
 import torch.nn as nn
@@ -63,7 +64,6 @@ class GATNet(torch.nn.Module):
     def forward_with_weights(self, x, edge_index, edge_weight=None):
 
         if edge_weight is not None:
-            x = F.relu(self.conv1(x, edge_index, edge_weight))
             return self.forward_with_gat_weights(x, edge_index, edge_weight)
         else:
             data = Data(x=x, edge_index=edge_index)
@@ -81,56 +81,39 @@ class GATNet(torch.nn.Module):
         return F.log_softmax(x, dim=1)
 
     def apply_weighted_gat(self, x, edge_index, edge_weight, conv_layer):
+        heads = conv_layer.heads
+        out_channels = conv_layer.out_channels
+        if conv_layer.lin is not None:
+            x_src = conv_layer.lin(x).view(-1, heads, out_channels)
+        else:
+            x_src = conv_layer.lin_src(x).view(-1, heads, out_channels)
 
-        lin_weight = conv_layer.lin_src.weight
-        att_src = conv_layer.att_src
-        att_dst = conv_layer.att_dst
+        alpha_src = (x_src * conv_layer.att_src).sum(dim=-1)
+        alpha_dst = (x_src * conv_layer.att_dst).sum(dim=-1)
 
-
-        x_src = torch.matmul(x, lin_weight)
-        alpha_src = (x_src * att_src).sum(dim=-1)
-        alpha_dst = (x_src * att_dst).sum(dim=-1)
-
-
-        row, col = edge_index
-        alpha = alpha_src[row] + alpha_dst[col]
+        source, target = edge_index
+        alpha = alpha_src[source] + alpha_dst[target]
         alpha = F.leaky_relu(alpha, conv_layer.negative_slope)
-
-
-        alpha = alpha * edge_weight
-
-
-        alpha = softmax(alpha, row, x.size(0))
-
-
+        alpha = alpha * edge_weight.view(-1, 1)
+        alpha = pyg_softmax(alpha, target, num_nodes=x.size(0))
         alpha = F.dropout(alpha, p=conv_layer.dropout, training=self.training)
 
-
-        out = torch.zeros_like(x_src)
-        out = out.scatter_add_(0, col.unsqueeze(-1).expand(-1, x_src.size(-1)),
-                               x_src[row] * alpha.unsqueeze(-1))
+        out = torch.zeros(
+            (x.size(0), heads, out_channels),
+            dtype=x_src.dtype,
+            device=x_src.device,
+        )
+        target_index = target.view(-1, 1, 1).expand(-1, heads, out_channels)
+        out.scatter_add_(0, target_index, x_src[source] * alpha.unsqueeze(-1))
+        if conv_layer.concat:
+            out = out.view(-1, heads * out_channels)
+        else:
+            out = out.mean(dim=1)
 
         if conv_layer.bias is not None:
             out += conv_layer.bias
 
         return out
-
-
-def softmax(src, index, num_nodes=None):
-
-    if num_nodes is None:
-        num_nodes = index.max().item() + 1
-
-
-    max_value = src.max()
-    exp_src = torch.exp(src - max_value)
-
-
-    sum_exp = torch.zeros(num_nodes, device=src.device)
-    sum_exp = sum_exp.scatter_add_(0, index, exp_src)
-
-
-    return exp_src / sum_exp[index]
 
 
 class GINNet(torch.nn.Module):

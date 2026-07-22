@@ -14,7 +14,9 @@ from experiment_utils import (
     get_node_embeddings,
     load_graph_data,
     preprocess_edge_refine,
+    remove_edges_from_adj,
     set_seed,
+    split_link_prediction_edges,
 )
 from model import GATNet
 
@@ -30,24 +32,22 @@ def main() -> None:
     set_seed(SEED)
 
     feat, label, original_adj = load_graph_data(DATASET_NAME, show_details=False)
-    original_adj_tensor = torch.FloatTensor(original_adj)
-    original_edge_index = (original_adj_tensor > 0).nonzero().t().contiguous()
-    num_edges = original_edge_index.size(1)
-    perm = torch.randperm(num_edges)
-    test_pos_edge_index = original_edge_index[:, perm[: int(num_edges * 0.5)]]
+    train_original_adj, test_pos_edge_index = split_link_prediction_edges(original_adj, test_ratio=0.5, seed=SEED)
     test_neg_edge_index = get_neg_edges_from_adj(original_adj, test_pos_edge_index.size(1))
     features = torch.FloatTensor(feat).to(device)
     results = []
 
     for epsilon in EPSILON_VALUES:
         set_seed(SEED)
-        processed_adj = preprocess_edge_refine(original_adj, epsilon, sample_ratio=SAMPLING_RATIO)
+        processed_adj = preprocess_edge_refine(train_original_adj, epsilon, sample_ratio=SAMPLING_RATIO)
+        processed_adj = remove_edges_from_adj(processed_adj, test_pos_edge_index)
         processed_edge_num = int(np.sum(processed_adj != 0) / 2)
         train_edge_index = (torch.FloatTensor(processed_adj) > 0).nonzero().t().contiguous().to(device)
         data = Data(x=features, edge_index=train_edge_index)
         model = GATNet(num_feature=feat.shape[1], num_label=len(np.unique(label))).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=0.00001)
-        train_neg_edge = get_neg_edges_from_adj(processed_adj, train_edge_index.size(1)).to(device)
+        negative_sampling_adj = np.logical_or(processed_adj != 0, original_adj != 0)
+        train_neg_edge = get_neg_edges_from_adj(negative_sampling_adj, train_edge_index.size(1)).to(device)
 
         model.train()
         for _ in range(1, 201):

@@ -271,6 +271,37 @@ def get_neg_edges_from_adj(adj_matrix: np.ndarray, num_samples: int) -> torch.Te
     return torch.tensor(candidates[chosen_indices].T, dtype=torch.long)
 
 
+def split_link_prediction_edges(
+    adj_matrix: np.ndarray,
+    test_ratio: float,
+    seed: int,
+) -> tuple[np.ndarray, torch.Tensor]:
+    """Create a disjoint train graph and positive test set from unique undirected edges."""
+    rows, cols = np.where(np.triu(adj_matrix != 0, k=1))
+    edges = np.stack([rows, cols], axis=1)
+    if len(edges) < 2:
+        raise ValueError("link prediction requires at least two undirected edges")
+
+    generator = np.random.default_rng(seed)
+    test_size = min(max(1, int(len(edges) * test_ratio)), len(edges) - 1)
+    test_edges = edges[generator.permutation(len(edges))[:test_size]]
+
+    train_adj = adj_matrix.copy()
+    train_adj[test_edges[:, 0], test_edges[:, 1]] = 0
+    train_adj[test_edges[:, 1], test_edges[:, 0]] = 0
+    test_pos_edge_index = torch.tensor(test_edges.T, dtype=torch.long)
+    return train_adj, test_pos_edge_index
+
+
+def remove_edges_from_adj(adj_matrix: np.ndarray, edge_index: torch.Tensor) -> np.ndarray:
+    """Remove both directions of an undirected edge set from an adjacency matrix."""
+    cleaned_adj = adj_matrix.copy()
+    edges = edge_index.cpu().numpy()
+    cleaned_adj[edges[0], edges[1]] = 0
+    cleaned_adj[edges[1], edges[0]] = 0
+    return cleaned_adj
+
+
 def get_node_embeddings(model, x: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
     x = model.conv1(x, edge_index)
     x = F.relu(x)

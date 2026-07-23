@@ -47,6 +47,29 @@ def main() -> None:
     origin["model"] = origin["model"].astype(str).str.lower()
     origin_lookup = origin.groupby(["dataset", "model"])["test_accuracy"].mean()
 
+    private_repeat_summary = (
+        private.groupby(["method", "dataset", "model", "epsilon"], as_index=False)["test_accuracy"]
+        .agg(
+            mean_accuracy="mean",
+            std_accuracy=lambda values: float(np.std(values.to_numpy(dtype=float), ddof=0)),
+            num_runs="count",
+        )
+    )
+    origin_repeat_summary = (
+        origin.groupby(["dataset", "model"], as_index=False)["test_accuracy"]
+        .agg(
+            mean_accuracy="mean",
+            std_accuracy=lambda values: float(np.std(values.to_numpy(dtype=float), ddof=0)),
+            num_runs="count",
+        )
+    )
+    origin_repeat_summary.insert(0, "method", "origin")
+    origin_repeat_summary["epsilon"] = np.nan
+    repeat_summary_path = output_dir / "repeated_seed_accuracy_summary.csv"
+    pd.concat([private_repeat_summary, origin_repeat_summary], ignore_index=True).to_csv(
+        repeat_summary_path, index=False
+    )
+
     rows = []
     grouped = private.groupby(["method", "dataset", "model"], sort=True)
     for (method, dataset_name, model_name), group in grouped:
@@ -88,7 +111,7 @@ def main() -> None:
 
     result_path = output_dir / "paper_summary_metrics.csv"
     pd.DataFrame(rows).to_csv(result_path, index=False)
-    print(f"Saved results to {result_path}")
+    print(f"Saved results to {result_path} and {repeat_summary_path}")
 
 
 if __name__ == "__main__":

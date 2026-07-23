@@ -28,6 +28,7 @@ DEFAULT_DATASETS = ["dblp", "acm", "cora", "amap"]
 DEFAULT_EPSILONS = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5]
 DEFAULT_MODELS = ["gat", "gcn", "gin"]
 DEFAULT_SINGLE_SEED = 42
+DEFAULT_PAPER_SEEDS = [42, 42, 42, 42, 42]
 DEFAULT_METHOD_COMBOS = [
     ("jaccard", "simple"),
     ("jaccard", "isotonic"),
@@ -58,8 +59,40 @@ def set_seed(seed: int) -> None:
         torch.backends.cudnn.deterministic = True
 
 
-def get_repeat_seeds(dataset_name: str) -> list[int]:
-    return [DEFAULT_SINGLE_SEED]
+def resolve_experiment_scope(
+    preset: str,
+    datasets: list[str] | None = None,
+    epsilons: list[float] | None = None,
+    models: list[str] | None = None,
+    seeds: list[int] | None = None,
+    default_datasets: list[str] | None = None,
+) -> tuple[list[str], list[float], list[str], list[int]]:
+    """Resolve single-run, paper-repeat, or smoke-test experiment defaults."""
+    default_datasets = default_datasets or DEFAULT_DATASETS
+    if preset == "smoke":
+        return (
+            datasets or ["cora"],
+            epsilons or [1.0],
+            models or ["gcn"],
+            seeds or [DEFAULT_SINGLE_SEED],
+        )
+    return (
+        datasets or default_datasets.copy(),
+        epsilons or DEFAULT_EPSILONS.copy(),
+        models or DEFAULT_MODELS.copy(),
+        seeds or (DEFAULT_PAPER_SEEDS.copy() if preset == "paper" else [DEFAULT_SINGLE_SEED]),
+    )
+
+
+def resolve_training_limits(
+    preset: str,
+    max_epochs: int | None,
+    patience: int | None,
+) -> tuple[int, int]:
+    """Use short limits for smoke tests without changing paper/default runs."""
+    if preset == "smoke":
+        return max_epochs or 5, patience or 2
+    return max_epochs or 700, patience or 100
 
 
 @lru_cache(maxsize=None)

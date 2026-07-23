@@ -29,6 +29,7 @@ EdgeRefine/
 |  |- dblp/
 |  `- TUDataset/MUTAG/
 |- experiment_utils.py          # Shared utilities for loading data, preprocessing, training, and seeding
+|- prepare_datasets.py          # Safe extraction and POSIX permission normalization
 |- model.py                     # GAT, GCN, and GIN implementations
 |- structure.py                 # EdgeRefine, Blink, DPRR, LAPGRAPH, LDPGen, and graph post-processing
 |- grand_attack_core.py         # Shared GRAND attack implementation
@@ -56,16 +57,24 @@ pip install -r requirements.txt
 
 ## Datasets
 
-The released code expects a local `dataset/` directory. The datasets are provided as a compressed archive `EdgeRefine-datasets.zip` in the repository root.
+The released code expects a local `dataset/` directory. `EdgeRefine-datasets.zip` is the single canonical dataset copy distributed in the repository; extracted data are local-only and ignored by Git.
 
-Before running the experiments, create a `dataset/` directory and extract the archive contents into it.
+The recommended cross-platform preparation command is:
+
+```bash
+python prepare_datasets.py
+```
+
+This command validates archive paths, extracts into `dataset/`, and applies the user portion of `chmod -R u+rwX` on POSIX systems so that the bundled `TUDataset/MUTAG` directory remains traversable.
+
+Manual extraction remains supported:
 
 ```bash
 mkdir dataset
 unzip EdgeRefine-datasets.zip -d dataset
 ```
 
-The current archive uses POSIX-style `/` separators and can also be extracted portably with Python:
+The archive uses POSIX-style `/` separators and can also be extracted portably with Python:
 
 ```bash
 python -m zipfile -e EdgeRefine-datasets.zip dataset
@@ -113,7 +122,7 @@ Each public script corresponds to a paper experiment category or a public evalua
 ### Main Node Classification
 
 - `exp_single_edgerefine.py`
-  Single-run public EdgeRefine benchmark over the default node-classification datasets, privacy budgets, and GNN backbones.
+  Scoped EdgeRefine benchmark with single-run, paper-repeat, and smoke-test presets.
 - `exp_main_edgerefine.py`
   Main EdgeRefine experiment entrypoint for the released node-classification setting.
 - `exp_no_noise_baseline.py`
@@ -122,7 +131,7 @@ Each public script corresponds to a paper experiment category or a public evalua
 ### Baseline Comparisons
 
 - `exp_single_baselines.py`
-  Single-run public baseline benchmark over `blink_hard`, `blink_hybrid`, `dprr`, `lapgraph`, and `ldpgen`.
+  Scoped baseline benchmark over `blink_hard`, `blink_hybrid`, `dprr`, `lapgraph`, and `ldpgen`, including repeated-seed and smoke-test presets.
 - `exp_blink_hard_comparison.py`
   Blink-hard comparison experiment.
 - `exp_blink_hybrid_comparison.py`
@@ -177,17 +186,40 @@ python exp_main_edgerefine.py
 
 `exp_single_edgerefine.py` remains available as a more verbose single-seed grid entrypoint. Both scripts now preprocess each `(dataset, epsilon, seed)` graph once and reuse it across GAT, GCN, and GIN.
 
+For the paper protocol of five independent runs, each using `seed=42`, run:
+
+```bash
+python exp_main_edgerefine.py --preset paper
+```
+
+All main node-classification entrypoints accept `--datasets`, `--epsilons`, `--models`, and `--seeds` for explicit scoping.
+
 ### Main Released Baselines
 
 ```bash
 python exp_single_baselines.py
 ```
 
+Use `python exp_single_baselines.py --preset paper` for the same five-run protocol.
+
 ### No-Noise Baseline
 
 ```bash
 python exp_no_noise_baseline.py
 ```
+
+Use `python exp_no_noise_baseline.py --preset paper` for the corresponding repeated Origin results.
+
+### Smoke Test
+
+The smoke preset runs Cora, one privacy budget, one GCN model, one seed, and at most five training epochs:
+
+```bash
+python exp_main_edgerefine.py --preset smoke
+python exp_single_baselines.py --preset smoke
+```
+
+The same preset is available in `exp_single_edgerefine.py`, `exp_no_noise_baseline.py`, and `exp_rr_only_ablation.py`.
 
 ### Verbose Single-Seed Entry
 
@@ -237,7 +269,7 @@ python exp_sampling_rate_sweep.py
 python exp_rr_only_ablation.py
 ```
 
-Pass multiple values to `--seeds` when repeated runs are required.
+Use `--preset paper` for five runs with `seed=42`, or pass explicit run seeds to `--seeds`.
 
 ### Table 3/4 Summary Metrics
 
@@ -250,7 +282,7 @@ python exp_summary_metrics.py \
   --origin-csv result/exp_no_noise_baseline/no_noise_baseline_results.csv
 ```
 
-This produces variance, CV, AUR, MCF, and PUBI for each method, dataset, and architecture.
+This produces variance, CV, AUR, MCF, and PUBI for each method, dataset, and architecture. It also writes `repeated_seed_accuracy_summary.csv` with the mean, population standard deviation, and run count for every method/dataset/model/privacy-budget configuration.
 
 ### Link Prediction
 
@@ -269,7 +301,7 @@ python exp_mutag_graph_classification.py
 
 ## Reproducing Main Results
 
-For the released node-classification experiments, the public default setup uses a **single reproducible run with `seed=42`**.
+For quick artifact checks, the public default setup remains a **single reproducible run with `seed=42`**. The paper's five-run node-classification protocol is now available through `--preset paper`; all five runs use `seed=42` and are distinguished by `run_id` in the output CSV files.
 
 This applies to the released single-run public entrypoints:
 
@@ -280,7 +312,7 @@ This applies to the released single-run public entrypoints:
 
 The `MUTAG` graph classification script is an intentional exception and preserves its original repeated-run protocol.
 
-The single-seed workflow is intended as a deterministic, runnable artifact check. Paper values that report means, standard deviations, or significance tests require the corresponding repeated-seed configuration.
+The single-seed workflow is intended as a deterministic, runnable artifact check. Use the paper preset for reported means, standard deviations, variance, and PUBI calculations, and the smoke preset for a short end-to-end environment check.
 
 ## Paper Result Map
 

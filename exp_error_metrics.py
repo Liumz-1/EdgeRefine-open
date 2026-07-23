@@ -10,8 +10,6 @@ import pandas as pd
 from experiment_utils import DEFAULT_DATASETS, DEFAULT_EPSILONS, ensure_output_dir, load_graph_data, set_seed
 from structure import jaccard_probability, symmetric_randomized_response_perturbation
 
-DATASETS = DEFAULT_DATASETS
-EPSILON_VALUES = DEFAULT_EPSILONS
 SEED = 42
 
 
